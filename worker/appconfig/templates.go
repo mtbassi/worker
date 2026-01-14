@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"text/template"
 	"time"
 
@@ -16,8 +17,9 @@ import (
 )
 
 // TemplateConfig holds the templates configuration from AppConfig.
+// Templates are organized by step name, then template name.
 type TemplateConfig struct {
-	Templates map[string]TemplateDefinition `yaml:"templates"`
+	Templates map[string]map[string]TemplateDefinition `yaml:"templates"`
 }
 
 // TemplateDefinition represents a single template definition.
@@ -53,9 +55,9 @@ func NewTemplateRenderer(cfg config.AppConfigSettings, logger *slog.Logger) *Tem
 }
 
 // LoadTemplate loads a template by reference.
-// Format: "config_name:template_key" (e.g., "journey.account_creation.templates:reminder_10_min")
+// Format: "config_name:step_name:template_key" (e.g., "journey.onboarding-v2.templates:personal-data:personal-data-soft")
 func (r *TemplateRenderer) LoadTemplate(templateRef string) (*messaging.Template, error) {
-	configName, templateKey, err := parseTemplateRef(templateRef)
+	configName, stepName, templateKey, err := parseTemplateRef(templateRef)
 	if err != nil {
 		return nil, err
 	}
@@ -65,9 +67,15 @@ func (r *TemplateRenderer) LoadTemplate(templateRef string) (*messaging.Template
 		return nil, err
 	}
 
-	def, ok := templateConfig.Templates[templateKey]
+	// Navigate nested structure: step -> template
+	stepTemplates, ok := templateConfig.Templates[stepName]
 	if !ok {
-		return nil, fmt.Errorf("template key %s not found in config %s", templateKey, configName)
+		return nil, fmt.Errorf("step '%s' not found in config %s", stepName, configName)
+	}
+
+	def, ok := stepTemplates[templateKey]
+	if !ok {
+		return nil, fmt.Errorf("template '%s' not found in step '%s' for config %s", templateKey, stepName, configName)
 	}
 
 	return &messaging.Template{
@@ -80,14 +88,25 @@ func (r *TemplateRenderer) LoadTemplate(templateRef string) (*messaging.Template
 }
 
 // Render applies metadata to a template and returns the rendered content.
+// Supports both {{field}} (direct access) and {{metadata.field}} (dot notation) syntax.
 func (r *TemplateRenderer) Render(tmpl *messaging.Template, metadata map[string]any) (string, error) {
 	t, err := template.New("message").Parse(tmpl.Content.Body)
 	if err != nil {
 		return "", fmt.Errorf("parse template: %w", err)
 	}
 
+	// Create data structure supporting both access patterns
+	data := map[string]any{
+		"metadata": metadata,
+	}
+
+	// Merge metadata fields at root level for direct access ({{field}})
+	for k, v := range metadata {
+		data[k] = v
+	}
+
 	var buf bytes.Buffer
-	if err := t.Execute(&buf, metadata); err != nil {
+	if err := t.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("execute template: %w", err)
 	}
 
@@ -132,14 +151,23 @@ func (r *TemplateRenderer) loadTemplateConfig(configName string) (*TemplateConfi
 	return &cfg, nil
 }
 
-// parseTemplateRef parses a template reference into config name and template key.
-func parseTemplateRef(ref string) (configName, templateKey string, err error) {
-	for i := len(ref) - 1; i >= 0; i-- {
-		if ref[i] == ':' {
-			return ref[:i], ref[i+1:], nil
-		}
+// parseTemplateRef parses a template reference into config name, step name, and template key.
+// Expected format: "journey.{journey-id}.templates:{step}:{template}"
+// Example: "journey.onboarding-v2.templates:personal-data:personal-data-soft"
+func parseTemplateRef(ref string) (configName, stepName, templateKey string, err error) {
+	// Find last colon (separates step from template)
+	lastColon := strings.LastIndex(ref, ":")
+	if lastColon == -1 {
+		return "", "", "", fmt.Errorf("invalid template reference format: %s (expected 'config:step:template')", ref)
 	}
-	return "", "", fmt.Errorf("invalid template reference format: %s (expected 'config_name:template_key')", ref)
+
+	// Find second-to-last colon (separates config from step)
+	secondLastColon := strings.LastIndex(ref[:lastColon], ":")
+	if secondLastColon == -1 {
+		return "", "", "", fmt.Errorf("invalid template reference format: %s (expected 'config:step:template')", ref)
+	}
+
+	return ref[:secondLastColon], ref[secondLastColon+1:lastColon], ref[lastColon+1:], nil
 }
 
 // ClearCache clears the template configuration cache.

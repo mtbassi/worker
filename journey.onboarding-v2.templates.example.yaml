@@ -1,0 +1,48 @@
+# Example template configuration for journey onboarding-v2
+# This file demonstrates the step-grouped template structure
+# File should be deployed to AWS AppConfig with name: journey.onboarding-v2.templates.yaml
+
+templates:
+  # Templates for the personal-data step
+  personal-data:
+    personal-data-soft:
+      channel: whatsapp
+      content:
+        type: text
+        body: |
+          Hello {{nome_cliente}}! We noticed you didn't complete your registration. Can we help with something?
+
+    personal-data-cta:
+      channel: whatsapp
+      content:
+        type: text
+        body: |
+          Complete your registration now to continue. Click here: {{metadata.link}}
+
+  # Templates for the document-upload step
+  document-upload:
+    document-upload-soft:
+      channel: whatsapp
+      content:
+        type: text
+        body: |
+          We're almost there, {{nome_cliente}}. Just upload your documents to proceed.
+
+    document-upload-reminder:
+      channel: whatsapp
+      content:
+        type: text
+        body: |
+          Hi {{nome_cliente}}, we still need your documents to continue. Upload them here: {{link}}
+
+# Variable Interpolation Examples:
+# - Direct access: {{nome_cliente}}
+# - Dot notation: {{metadata.nome_cliente}}
+# - Both work! You can mix them in the same template.
+#
+# The metadata comes from JourneyState.Metadata (map[string]any)
+# Example metadata:
+# {
+#   "nome_cliente": "João",
+#   "link": "https://example.com/upload"
+# }

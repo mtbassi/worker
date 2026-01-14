@@ -111,8 +111,8 @@ func (p *Processor) sendRecoveryMessage(
 		"time_since_interaction", state.TimeSinceLastInteraction(),
 	)
 
-	// Build template reference: journey.<journey-id>.templates:<template-name>
-	templateRef := fmt.Sprintf("journey.%s.templates:%s", cfg.Journey, rule.Template)
+	// Build template reference: journey.<journey-id>.templates:<step>:<template-name>
+	templateRef := fmt.Sprintf("journey.%s.templates:%s:%s", cfg.Journey, state.Step, rule.Template)
 
 	// Create message
 	msg := domain.Message{
