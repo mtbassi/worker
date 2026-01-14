@@ -18,20 +18,9 @@ import (
 
 // TemplateConfig holds the templates configuration from AppConfig.
 // Templates are organized by step name, then template name.
+// Each template is a simple string containing the message body.
 type TemplateConfig struct {
-	Templates map[string]map[string]TemplateDefinition `yaml:"templates"`
-}
-
-// TemplateDefinition represents a single template definition.
-type TemplateDefinition struct {
-	Channel string                 `yaml:"channel"`
-	Content TemplateContentDef     `yaml:"content"`
-}
-
-// TemplateContentDef holds the content type and body.
-type TemplateContentDef struct {
-	Type string `yaml:"type"`
-	Body string `yaml:"body"`
+	Templates map[string]map[string]string `yaml:"templates"`
 }
 
 // TemplateRenderer implements messaging.TemplateRenderer using AppConfig.
@@ -73,16 +62,16 @@ func (r *TemplateRenderer) LoadTemplate(templateRef string) (*messaging.Template
 		return nil, fmt.Errorf("step '%s' not found in config %s", stepName, configName)
 	}
 
-	def, ok := stepTemplates[templateKey]
+	body, ok := stepTemplates[templateKey]
 	if !ok {
 		return nil, fmt.Errorf("template '%s' not found in step '%s' for config %s", templateKey, stepName, configName)
 	}
 
 	return &messaging.Template{
-		Channel: def.Channel,
+		Channel: "whatsapp",
 		Content: messaging.TemplateContent{
-			Type: def.Content.Type,
-			Body: def.Content.Body,
+			Type: "text",
+			Body: body,
 		},
 	}, nil
 }
