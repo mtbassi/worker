@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # Redis for state and recovery history storage
+  redis:
+    image: redis:7-alpine
+    container_name: recovery-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - recovery-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    command: redis-server --appendonly yes
+
+  # AppConfig Mock Server - serves journey configurations
+  appconfig-mock:
+    build:
+      context: ..
+      dockerfile: docker/appconfig-mock.Dockerfile
+    container_name: recovery-appconfig-mock
+    ports:
+      - "2772:2772"
+    volumes:
+      - ../local/configs:/configs:ro
+    networks:
+      - recovery-network
+    environment:
+      - PORT=2772
+      - CONFIGS_DIR=/configs
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:2772/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      - redis
+
+  # WhatsApp Mock Server - logs messages instead of sending
+  whatsapp-mock:
+    build:
+      context: ..
+      dockerfile: docker/whatsapp-mock.Dockerfile
+    container_name: recovery-whatsapp-mock
+    ports:
+      - "8081:8081"
+    networks:
+      - recovery-network
+    environment:
+      - PORT=8081
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Event Tracker Lambda - HTTP API for journey events
+  event-tracker:
+    build:
+      context: ..
+      dockerfile: docker/event-tracker.Dockerfile
+    container_name: recovery-event-tracker
+    ports:
+      - "8080:8080"
+    networks:
+      - recovery-network
+    env_file:
+      - ../local/.env.event-tracker
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  # Worker Lambda - scans and sends recovery messages
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/worker.Dockerfile
+    container_name: recovery-worker
+    networks:
+      - recovery-network
+    env_file:
+      - ../local/.env.worker
+    depends_on:
+      redis:
+        condition: service_healthy
+      appconfig-mock:
+        condition: service_healthy
+      whatsapp-mock:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  recovery-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local

@@ -62,6 +62,18 @@ func (c *Client) Send(ctx context.Context, msg domain.Message) error {
 		}
 	}
 
+	// Check if mock mode is enabled
+	if true {
+		c.logger.Info("📱 MOCK: Would send WhatsApp message",
+			"to", msg.CustomerNumber,
+			"template", msg.Template,
+			"step", msg.Step,
+			"repique_id", msg.RepiqueID,
+			"body", renderedBody,
+		)
+		return nil
+	}
+
 	c.logger.Info("sending whatsapp message",
 		"customer_number", msg.CustomerNumber,
 		"repique_id", msg.RepiqueID,

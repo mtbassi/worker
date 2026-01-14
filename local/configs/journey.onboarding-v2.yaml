@@ -1,0 +1,25 @@
+journey: onboarding-v2
+global:
+  enabled: true
+  max_total_attempts: 5
+  min_interval_between_attempts_minutes: 2
+steps:
+  - name: personal-data
+    recovery_rules:
+      - name: early-reminder
+        enabled: true
+        inactive_minutes: 2
+        max_attempts: 2
+        template: personal-data-soft
+      - name: late-reminder
+        enabled: false
+        inactive_minutes: 30
+        max_attempts: 2
+        template: personal-data-cta
+  - name: document-upload
+    recovery_rules:
+      - name: first-reminder
+        enabled: true
+        inactive_minutes: 60
+        max_attempts: 1
+        template: document-upload-soft

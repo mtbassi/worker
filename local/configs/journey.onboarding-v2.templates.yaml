@@ -1,0 +1,30 @@
+# Template configuration for journey onboarding-v2
+# Templates are grouped by step and referenced by name in recovery rules
+
+templates:
+  # Templates for the personal-data step
+  personal-data:
+    personal-data-soft: |
+      Hello {{.nome_cliente}}! We noticed you didn't complete your registration. Can we help with something?
+
+    personal-data-cta: |
+      Complete your registration now to continue. Click here: {{.metadata.link}}
+
+  # Templates for the document-upload step
+  document-upload:
+    document-upload-soft: |
+      We're almost there, {{.nome_cliente}}. Just upload your documents to proceed.
+
+    document-upload-reminder: |
+      Hi {{.nome_cliente}}, we still need your documents to continue. Upload them here: {{.link}}
+
+# Variable Interpolation:
+# - Direct access: {{nome_cliente}}
+# - Dot notation: {{metadata.nome_cliente}}
+# - Both work! Metadata comes from JourneyState.Metadata
+#
+# Example metadata:
+# {
+#   "nome_cliente": "João Silva",
+#   "link": "https://example.com/upload"
+# }

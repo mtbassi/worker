@@ -33,9 +33,53 @@ func handleLambda(ctx context.Context) error {
 }
 
 func runLocal() error {
+	logger := logging.New(logging.DefaultConfig())
+
+	// Check for WORKER_INTERVAL environment variable
+	intervalStr := os.Getenv("WORKER_INTERVAL")
+	if intervalStr == "" {
+		intervalStr = "5m" // Default to 5 minutes
+	}
+
+	interval, err := time.ParseDuration(intervalStr)
+	if err != nil {
+		logger.Error("invalid WORKER_INTERVAL", "value", intervalStr, "error", err)
+		return err
+	}
+
+	logger.Info("Starting worker in local loop mode",
+		"interval", interval.String(),
+	)
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	return run(ctx)
+
+	// Create ticker for periodic execution
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Run immediately on startup
+	logger.Info("Running initial worker execution")
+	if err := run(ctx); err != nil {
+		logger.Error("Initial worker execution failed", "error", err)
+		// Continue despite error - retry on next tick
+	}
+
+	// Run on interval
+	for {
+		select {
+		case <-ticker.C:
+			logger.Info("Starting scheduled worker execution")
+			if err := run(ctx); err != nil {
+				logger.Error("Worker execution failed", "error", err)
+				// Continue despite error - retry on next tick
+			}
+			logger.Info("Worker execution completed")
+		case <-ctx.Done():
+			logger.Info("Shutting down worker", "reason", ctx.Err())
+			return ctx.Err()
+		}
+	}
 }
 
 func run(ctx context.Context) error {

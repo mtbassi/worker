@@ -23,6 +23,17 @@ func NewAPIHandler(tracker *service.Tracker, logger *slog.Logger) *APIHandler {
 	}
 }
 
+// handleHealth returns a health check response.
+func (h *APIHandler) handleHealth(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	return events.APIGatewayProxyResponse{
+		StatusCode: 200,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+		},
+		Body: `{"status":"healthy","service":"event-tracker"}`,
+	}, nil
+}
+
 // Handle routes API Gateway requests to the appropriate handler.
 func (h *APIHandler) Handle(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	h.logger.Info("request received",
@@ -30,6 +41,8 @@ func (h *APIHandler) Handle(ctx context.Context, req events.APIGatewayProxyReque
 		"method", req.HTTPMethod)
 
 	switch {
+	case req.Path == "/health" && req.HTTPMethod == "GET":
+		return h.handleHealth(ctx, req)
 	case req.Path == "/journey/event" && req.HTTPMethod == "POST":
 		return h.handleEvent(ctx, req)
 	case req.Path == "/journey/finish" && req.HTTPMethod == "POST":
