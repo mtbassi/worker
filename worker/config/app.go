@@ -1,6 +1,8 @@
 package config
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -43,7 +45,7 @@ type WhatsAppConfig struct {
 }
 
 // LoadFromEnv loads configuration from environment variables with sensible defaults.
-func LoadFromEnv() (*AppConfig, error) {
+func LoadFromEnv(ctx context.Context) (*AppConfig, error) {
 	// Build Redis config with ElastiCache support
 	redisAddr := getEnvOrDefault("REDIS_ADDR", "localhost:6379")
 
@@ -88,14 +90,34 @@ func LoadFromEnv() (*AppConfig, error) {
 		WhatsApp: WhatsAppConfig{
 			APIEndpoint:   getEnvOrDefault("WHATSAPP_API_ENDPOINT", "https://graph.facebook.com/v18.0"),
 			PhoneNumberID: os.Getenv("WHATSAPP_PHONE_NUMBER_ID"),
-			ClientID:      os.Getenv("WHATSAPP_CLIENT_ID"),
-			ClientSecret:  os.Getenv("WHATSAPP_CLIENT_SECRET"),
 			STSEndpoint:   os.Getenv("WHATSAPP_STS_ENDPOINT"),
 			Timeout:       parseDurationOrDefault("WHATSAPP_TIMEOUT", 10*time.Second),
 			MaxRetries:    parseIntOrDefault("WHATSAPP_MAX_RETRIES", 3),
 			RetryDelay:    parseDurationOrDefault("WHATSAPP_RETRY_DELAY", 2*time.Second),
 		},
 	}
+
+	// Load WhatsApp OAuth2 credentials from Secrets Manager
+	secretName := os.Getenv("WHATSAPP_SECRET_NAME")
+	if secretName == "" {
+		return nil, fmt.Errorf("WHATSAPP_SECRET_NAME environment variable is required")
+	}
+
+	// Create Secrets Manager client
+	smClient, err := NewSecretsManagerClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("create secrets manager client: %w", err)
+	}
+
+	// Fetch WhatsApp secret
+	whatsappSecret, err := smClient.GetWhatsAppSecret(ctx, secretName)
+	if err != nil {
+		return nil, fmt.Errorf("load whatsapp credentials from secrets manager: %w", err)
+	}
+
+	// Populate credentials from secret
+	cfg.WhatsApp.ClientID = whatsappSecret.ClientID
+	cfg.WhatsApp.ClientSecret = whatsappSecret.ClientSecret
 
 	if err := cfg.Validate(); err != nil {
 		return nil, err

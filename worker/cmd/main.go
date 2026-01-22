@@ -41,7 +41,7 @@ func run(ctx context.Context) error {
 	logger := logging.New(logging.DefaultConfig())
 
 	// Load configuration
-	cfg, err := config.LoadFromEnv()
+	cfg, err := config.LoadFromEnv(ctx)
 	if err != nil {
 		logger.Error("failed to load config", "error", err)
 		return err
