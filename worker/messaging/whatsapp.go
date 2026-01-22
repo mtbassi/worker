@@ -14,7 +14,9 @@ import (
 type WhatsAppConfig struct {
 	APIEndpoint   string        // e.g., "https://graph.facebook.com/v18.0"
 	PhoneNumberID string        // Your WhatsApp Business phone number ID
-	AccessToken   string        // Access token for authentication
+	ClientID      string        // OAuth2 client ID for STS
+	ClientSecret  string        // OAuth2 client secret for STS
+	STSEndpoint   string        // STS token endpoint URL
 	Timeout       time.Duration // HTTP timeout
 	MaxRetries    int           // Maximum retry attempts
 	RetryDelay    time.Duration // Delay between retries
@@ -24,15 +26,24 @@ type WhatsAppConfig struct {
 type WhatsAppClient struct {
 	config     WhatsAppConfig
 	httpClient *http.Client
+	stsClient  *STSClient
 }
 
 // NewWhatsAppClient creates a new WhatsApp API client.
 func NewWhatsAppClient(config WhatsAppConfig) *WhatsAppClient {
+	stsConfig := STSConfig{
+		Endpoint:     config.STSEndpoint,
+		ClientID:     config.ClientID,
+		ClientSecret: config.ClientSecret,
+		Timeout:      config.Timeout,
+	}
+
 	return &WhatsAppClient{
 		config: config,
 		httpClient: &http.Client{
 			Timeout: config.Timeout,
 		},
+		stsClient: NewSTSClient(stsConfig),
 	}
 }
 
@@ -122,6 +133,12 @@ func (c *WhatsAppClient) Send(ctx context.Context, to, body string) (*WhatsAppRe
 }
 
 func (c *WhatsAppClient) sendRequest(ctx context.Context, message WhatsAppMessage) (*WhatsAppResponse, error) {
+	// Fetch access token from STS
+	accessToken, err := c.stsClient.GetToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get access token: %w", err)
+	}
+
 	// Marshal request body
 	body, err := json.Marshal(message)
 	if err != nil {
@@ -139,7 +156,7 @@ func (c *WhatsAppClient) sendRequest(ctx context.Context, message WhatsAppMessag
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.config.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	// Send request
 	resp, err := c.httpClient.Do(req)

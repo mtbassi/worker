@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/aws/aws-lambda-go/lambda"
 
@@ -66,14 +65,16 @@ func run(ctx context.Context) error {
 	configLoader := appconfig.NewLoader(cfg.AppConfig, logger.With("component", "config_loader"))
 	templateRenderer := appconfig.NewTemplateRenderer(cfg.AppConfig, logger.With("component", "templates"))
 
-	// Create WhatsApp messaging client
+	// Create WhatsApp messaging client with config from app.go
 	whatsappCfg := messaging.WhatsAppConfig{
 		APIEndpoint:   cfg.WhatsApp.APIEndpoint,
 		PhoneNumberID: cfg.WhatsApp.PhoneNumberID,
-		AccessToken:   cfg.WhatsApp.AccessToken,
-		Timeout:       10 * time.Second,
-		MaxRetries:    3,
-		RetryDelay:    2 * time.Second,
+		ClientID:      cfg.WhatsApp.ClientID,
+		ClientSecret:  cfg.WhatsApp.ClientSecret,
+		STSEndpoint:   cfg.WhatsApp.STSEndpoint,
+		Timeout:       cfg.WhatsApp.Timeout,
+		MaxRetries:    cfg.WhatsApp.MaxRetries,
+		RetryDelay:    cfg.WhatsApp.RetryDelay,
 	}
 	messengerClient := messaging.NewClient(templateRenderer, whatsappCfg, logger.With("component", "messenger"))
 

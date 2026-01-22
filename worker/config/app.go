@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,7 +34,12 @@ type WorkerConfig struct {
 type WhatsAppConfig struct {
 	APIEndpoint   string
 	PhoneNumberID string
-	AccessToken   string
+	ClientID      string
+	ClientSecret  string
+	STSEndpoint   string
+	Timeout       time.Duration
+	MaxRetries    int
+	RetryDelay    time.Duration
 }
 
 // LoadFromEnv loads configuration from environment variables with sensible defaults.
@@ -82,7 +88,12 @@ func LoadFromEnv() (*AppConfig, error) {
 		WhatsApp: WhatsAppConfig{
 			APIEndpoint:   getEnvOrDefault("WHATSAPP_API_ENDPOINT", "https://graph.facebook.com/v18.0"),
 			PhoneNumberID: os.Getenv("WHATSAPP_PHONE_NUMBER_ID"),
-			AccessToken:   os.Getenv("WHATSAPP_ACCESS_TOKEN"),
+			ClientID:      os.Getenv("WHATSAPP_CLIENT_ID"),
+			ClientSecret:  os.Getenv("WHATSAPP_CLIENT_SECRET"),
+			STSEndpoint:   os.Getenv("WHATSAPP_STS_ENDPOINT"),
+			Timeout:       parseDurationOrDefault("WHATSAPP_TIMEOUT", 10*time.Second),
+			MaxRetries:    parseIntOrDefault("WHATSAPP_MAX_RETRIES", 3),
+			RetryDelay:    parseDurationOrDefault("WHATSAPP_RETRY_DELAY", 2*time.Second),
 		},
 	}
 
@@ -96,6 +107,24 @@ func LoadFromEnv() (*AppConfig, error) {
 func getEnvOrDefault(key, defaultValue string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return defaultValue
+}
+
+func parseDurationOrDefault(key string, defaultValue time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return defaultValue
+}
+
+func parseIntOrDefault(key string, defaultValue int) int {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			return i
+		}
 	}
 	return defaultValue
 }

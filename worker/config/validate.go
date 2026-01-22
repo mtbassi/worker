@@ -25,6 +25,38 @@ func (c *AppConfig) Validate() error {
 		errs = append(errs, errors.New("worker default state TTL must be positive"))
 	}
 
+	if c.WhatsApp.APIEndpoint == "" {
+		errs = append(errs, errors.New("whatsapp API endpoint is required"))
+	}
+
+	if c.WhatsApp.PhoneNumberID == "" {
+		errs = append(errs, errors.New("whatsapp phone number ID is required"))
+	}
+
+	if c.WhatsApp.ClientID == "" {
+		errs = append(errs, errors.New("whatsapp client ID is required"))
+	}
+
+	if c.WhatsApp.ClientSecret == "" {
+		errs = append(errs, errors.New("whatsapp client secret is required"))
+	}
+
+	if c.WhatsApp.STSEndpoint == "" {
+		errs = append(errs, errors.New("whatsapp STS endpoint is required"))
+	}
+
+	if c.WhatsApp.Timeout <= 0 {
+		errs = append(errs, errors.New("whatsapp timeout must be positive"))
+	}
+
+	if c.WhatsApp.MaxRetries < 0 {
+		errs = append(errs, errors.New("whatsapp max retries cannot be negative"))
+	}
+
+	if c.WhatsApp.RetryDelay <= 0 {
+		errs = append(errs, errors.New("whatsapp retry delay must be positive"))
+	}
+
 	if len(errs) > 0 {
 		return fmt.Errorf("config validation failed: %w", errors.Join(errs...))
 	}
