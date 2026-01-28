@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -29,6 +30,7 @@ type TemplateRenderer struct {
 	endpoint   string
 	logger     *slog.Logger
 	cache      map[string]*TemplateConfig
+	mu         sync.RWMutex
 }
 
 // NewTemplateRenderer creates a new template renderer.
@@ -104,6 +106,19 @@ func (r *TemplateRenderer) Render(tmpl *messaging.Template, metadata map[string]
 
 // loadTemplateConfig fetches and caches a template configuration.
 func (r *TemplateRenderer) loadTemplateConfig(configName string) (*TemplateConfig, error) {
+	// Check cache with read lock
+	r.mu.RLock()
+	if cached, ok := r.cache[configName]; ok {
+		r.mu.RUnlock()
+		return cached, nil
+	}
+	r.mu.RUnlock()
+
+	// Acquire write lock for loading
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Double-check after acquiring write lock
 	if cached, ok := r.cache[configName]; ok {
 		return cached, nil
 	}
@@ -161,5 +176,7 @@ func parseTemplateRef(ref string) (configName, stepName, templateKey string, err
 
 // ClearCache clears the template configuration cache.
 func (r *TemplateRenderer) ClearCache() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.cache = make(map[string]*TemplateConfig)
 }

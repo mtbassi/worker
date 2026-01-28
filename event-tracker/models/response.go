@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -25,7 +26,21 @@ func NewErrorResponse(statusCode int, message string) events.APIGatewayProxyResp
 		Message: message,
 	}
 
-	bodyJSON, _ := json.Marshal(body)
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		slog.Error("failed to marshal error response",
+			"error", err,
+			"status_code", statusCode,
+			"message", message)
+		// Return a fallback error response
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusInternalServerError,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			Body: `{"error":"Internal Server Error","message":"failed to build error response"}`,
+		}
+	}
 
 	return events.APIGatewayProxyResponse{
 		StatusCode: statusCode,
@@ -39,7 +54,20 @@ func NewErrorResponse(statusCode int, message string) events.APIGatewayProxyResp
 // NewSuccessResponse creates an API Gateway success response.
 func NewSuccessResponse(statusCode int, data interface{}) events.APIGatewayProxyResponse {
 	body := SuccessResponse{Data: data}
-	bodyJSON, _ := json.Marshal(body)
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		slog.Error("failed to marshal success response",
+			"error", err,
+			"status_code", statusCode)
+		// Return an error response instead
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusInternalServerError,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			Body: `{"error":"Internal Server Error","message":"failed to build response"}`,
+		}
+	}
 
 	return events.APIGatewayProxyResponse{
 		StatusCode: statusCode,

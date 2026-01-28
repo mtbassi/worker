@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -18,6 +19,7 @@ type Loader struct {
 	endpoint   string
 	logger     *slog.Logger
 	cache      map[string]*config.JourneyConfig
+	mu         sync.RWMutex
 }
 
 // NewLoader creates a new AppConfig loader.
@@ -34,6 +36,19 @@ func NewLoader(cfg config.AppConfigSettings, logger *slog.Logger) *Loader {
 
 // LoadJourneyConfig loads configuration for a specific journey.
 func (l *Loader) LoadJourneyConfig(journeyID string) (*config.JourneyConfig, error) {
+	// Check cache with read lock
+	l.mu.RLock()
+	if cached, ok := l.cache[journeyID]; ok {
+		l.mu.RUnlock()
+		return cached, nil
+	}
+	l.mu.RUnlock()
+
+	// Acquire write lock for loading
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// Double-check after acquiring write lock
 	if cached, ok := l.cache[journeyID]; ok {
 		return cached, nil
 	}
@@ -82,5 +97,7 @@ func (l *Loader) loadProfile(profile string) ([]byte, error) {
 
 // ClearCache clears the configuration cache.
 func (l *Loader) ClearCache() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.cache = make(map[string]*config.JourneyConfig)
 }

@@ -108,7 +108,14 @@ func (c *Client) Del(ctx context.Context, keys ...string) error {
 	return c.native.Del(ctx, keys...).Err()
 }
 
-// Close closes the Redis connection.
+// Close fecha a conexão com o Redis.
 func (c *Client) Close() error {
 	return c.native.Close()
+}
+
+// SetNX define um valor APENAS se a chave NÃO existir.
+// Usado para locks de idempotência - garante que apenas um worker processa cada mensagem.
+// Retorna true se criou a chave (você é o primeiro), false se já existia.
+func (c *Client) SetNX(ctx context.Context, key, value string, expiration time.Duration) (bool, error) {
+	return c.native.SetNX(ctx, key, value, expiration).Result()
 }

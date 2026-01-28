@@ -150,24 +150,75 @@ func (s *StateStore) GetRepiqueHistory(ctx context.Context, journeyID, customerN
 	return &history, nil
 }
 
-// AppendRepiqueHistory appends a new entry to the recovery history.
-// Used by Lambda 2 after sending a recovery message.
+// AppendRepiqueHistory adiciona uma nova entrada ao histórico de recuperação.
+// NOTA: Esta operação não é atômica, mas o lock de idempotência (AcquireMessageLock)
+// garante que apenas um worker processa cada mensagem por vez.
+// Usado pela Lambda 2 após enviar mensagem de recuperação.
 func (s *StateStore) AppendRepiqueHistory(ctx context.Context, journeyID, customerNumber string, entry domain.RepiqueEntry) error {
+	// 1. Busca histórico atual
 	history, err := s.GetRepiqueHistory(ctx, journeyID, customerNumber)
 	if err != nil {
-		return err
+		return fmt.Errorf("buscar histórico: %w", err)
 	}
 
+	// 2. Adiciona nova entrada
 	history.Entries = append(history.Entries, entry)
 
+	// 3. Serializa para JSON
 	data, err := json.Marshal(history)
 	if err != nil {
-		return fmt.Errorf("marshal repique history: %w", err)
+		return fmt.Errorf("serializar histórico: %w", err)
 	}
 
+	// 4. Salva no Redis com TTL
 	key := fmt.Sprintf(KeyPatternJourneyRepiques, journeyID, customerNumber)
 	if err := s.client.Set(ctx, key, string(data), s.ttl); err != nil {
-		return fmt.Errorf("save repique history: %w", err)
+		return fmt.Errorf("salvar histórico: %w", err)
+	}
+
+	return nil
+}
+
+// MessageLockTTL é o tempo que o lock fica ativo.
+// 5 minutos é suficiente para enviar a mensagem e curto o bastante para permitir retry.
+const MessageLockTTL = 5 * time.Minute
+
+// AcquireMessageLock tenta adquirir um lock para enviar uma mensagem específica.
+// Retorna true se conseguiu o lock (pode enviar), false se já está travado (duplicata).
+//
+// Como funciona:
+//   - Usa SetNX (Set if Not eXists) do Redis
+//   - Se a chave não existe, cria e retorna true (você é o primeiro)
+//   - Se já existe, retorna false (outro worker já está processando)
+//
+// Isso garante que mesmo com múltiplos workers, apenas UM enviará a mensagem.
+func (s *StateStore) AcquireMessageLock(ctx context.Context, journeyID, customerNumber, ruleName string, attemptNumber int) (bool, error) {
+	// Chave única: journey:X:cliente:lock:regra:tentativa
+	key := fmt.Sprintf(KeyPatternMessageLock, journeyID, customerNumber, ruleName, attemptNumber)
+
+	acquired, err := s.client.SetNX(ctx, key, "locked", MessageLockTTL)
+	if err != nil {
+		return false, fmt.Errorf("adquirir lock: %w", err)
+	}
+
+	return acquired, nil
+}
+
+// UpdateLastInteractionAt atualiza o timestamp de última interação no estado da jornada.
+// Usado após enviar mensagem de recuperação para evitar flood de mensagens.
+func (s *StateStore) UpdateLastInteractionAt(ctx context.Context, journeyID, customerNumber string, timestamp time.Time) error {
+	// Busca estado atual
+	state, err := s.GetJourneyState(ctx, journeyID, customerNumber)
+	if err != nil {
+		return fmt.Errorf("buscar estado: %w", err)
+	}
+
+	// Atualiza timestamp
+	state.LastInteractionAt = timestamp
+
+	// Salva de volta
+	if err := s.SaveJourneyState(ctx, state); err != nil {
+		return fmt.Errorf("salvar estado: %w", err)
 	}
 
 	return nil
